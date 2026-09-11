@@ -168,8 +168,26 @@ All tunables live in the CONFIG block at the top of the file; each is overridden
 | `JB_PT_TURNS` | `6` | How many recent turns receive restored reasoning |
 | `JB_PT_CHARS` | `24000` | Total restoration budget (characters) |
 | `JB_CATEGORIES` | `llmjb,nsfw,game,explain,tech,direct,general` | Enabled prefill categories; disabled ones fall through to general |
+| `JB_LANG` | *(auto)* | Pin one prefill language (`ru`/`en`/`zh`) instead of detecting it from the last user message |
 
 The key pool is re-read on every request — edits to the key file apply without restarting the proxy.
+
+## Adding another language
+
+The proxy ships English, Russian and Chinese. Language is detected from the last user message by script — Cyrillic → `ru`, Han → `zh`, everything else (including Japanese kana) → `en` — and every prefill constant falls back to English when the language has no entry, so a partial pack is valid. `JB_LANG` overrides detection and pins one language for every request.
+
+Four places hold language data, all in `kimi_jb_proxy.py`:
+
+| Place | What it holds |
+|---|---|
+| `detect_lang()` | script → language code |
+| `LANG_PREFILLS` | private-reasoning prefills per language: `tech`, `game`, `llmjb`, `direct`, `explain`, `nsfw`, `general`, their `*_force` escalation variants, and `anchor` |
+| `CONTENT_PREFILL` + `CONTENT_LANG_ORDER` | the visible opening of the answer, one entry per language, ordered `("ru", "en", "zh")` |
+| category regexes (`GAME_RE`, `HACK_RE`, `TECH_RE`, `LLMJB_RE`, `EXPLAIN_RE`, `DIRECT_RE`, `NSFW_RE`, `REFUSAL_RE`, `HISTORY_REFUSAL_RE`) | keywords in the new language — without them its requests fall through to `general` and its refusals are not caught |
+
+Adding a language is a dict, not prompt engineering. Paste this into any capable LLM together with `kimi_jb_proxy.py`:
+
+> Add language pack `<code>` to `kimi_jb_proxy.py`. Follow the existing structure exactly: a new key in `LANG_PREFILLS` with the same keys as the `ru`/`zh` packs (translate the English meaning, keep the verdict-pinning intent and the trailing colon/ellipsis style), a `<code>` entry in every `CONTENT_PREFILL` tuple in the position given by `CONTENT_LANG_ORDER`, a `detect_lang()` branch for the script if it is not Latin/Cyrillic/Han, and keywords in that language appended to the category and refusal regexes. Keep the file Python-3 syntactically valid and change nothing else.
 
 ## Log verification guide
 
