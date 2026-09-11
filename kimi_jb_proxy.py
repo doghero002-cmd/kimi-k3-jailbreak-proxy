@@ -240,7 +240,8 @@ REFUSAL_RE = re.compile(
     r"cannot assist|not something i can|i'd be happy to help with something|"
     r"i'm not going to|i won't write|as an ai|i must decline|"
     r"я не могу|не могу|не смогу|не могу написать|не могу помочь|не могу предоставить|"
-    r"не могу выполнить|не дам|не буду|не стану|я отказываюсь|"
+    r"не могу выполнить|не дам|не буду|не стану|(?:я\s+)?отказываюсь|"
+    r"не возьмусь|не соберу|не выдам|не намерен|"
     r"придётся отказать|вынужден отказать|i can't|i cannot|i'm unable|"
     r"я вынужден отказаться|не в состоянии помочь|"
     r"ответ оста[её]тся тем же|я не продолжу|с этим я помочь не могу|"
@@ -636,7 +637,7 @@ GAME_RE = re.compile(
     r"|readprocessmemory|writeprocessmemory|entity.?list|view.?matrix"
     r"|world.?to.?screen|\\bw2s\\b|no.?recoil|recoil|triggerbot|spinbot|\\bbhop\\b"
     r"|soft.?aim|aim.?assist"
-    r"|чит|автотаргет|автовыдел|аимбот|валхак|инъекц|неймплейт|вархаммер"
+    r"|(?<!полу)чит(?:ер)?|автотаргет|автовыдел|аимбот|валхак|инъекц|неймплейт|вархаммер"
     r"|бекстаб|бэкстаб|пакет|опкод|античит|триггербот|отдач", re.I)
 TECH_RE = re.compile(
     r"bomb|explosiv|grenade|weapon|napalm|detonat|pipe\s*bomb|molotov"
@@ -1418,6 +1419,7 @@ class Handler(BaseHTTPRequestHandler):
                             pass
                     log(f"retry prefill {retry_info}")
             upstream = None
+            connect_dead = ""
             for connect_attempt in range(CONNECT_RETRIES + 1):
                 try:
                     upstream, http_failure = self._open_chat_with_key_failover(
@@ -1443,6 +1445,14 @@ class Handler(BaseHTTPRequestHandler):
                             )
                             log(f"upstream {status} after downstream stream started")
                             return
+                        if status in TRANSIENT_HTTP and attempt < MAX_RETRIES:
+                            # Transient upstream state persisted through the connect
+                            # retries: roll into the next outer attempt (seeded
+                            # escalation) instead of failing the client.
+                            connect_dead = f"HTTP {status}"
+                            log(f"upstream transient {status} persisted; escalating to "
+                                f"attempt {attempt + 2}/{MAX_RETRIES + 1}")
+                            break
                         self._send_json_error(status, payload, f"upstream {status}")
                         return
                     if connect_attempt:
@@ -1461,9 +1471,22 @@ class Handler(BaseHTTPRequestHandler):
                         )
                         log(f"upstream error after streamed reasoning {type(e).__name__}: {e}")
                         return
+                    if attempt < MAX_RETRIES:
+                        # Nothing delivered downstream: a timed-out attempt 0 must
+                        # not kill the request before the seeded retries are tried.
+                        connect_dead = f"{type(e).__name__}: {e}"
+                        log(f"upstream connect error persisted ({type(e).__name__}); "
+                            f"escalating to attempt {attempt + 2}/{MAX_RETRIES + 1}")
+                        break
                     payload = json.dumps({"error": {"message": f"proxy upstream error after {CONNECT_RETRIES + 1} attempts: {e}"}}).encode()
                     self._send_json_error(502, payload, f"upstream error after retries {type(e).__name__}: {e}")
                     return
+            if connect_dead:
+                if attempt < MAX_RETRIES:
+                    continue
+                payload = json.dumps({"error": {"message": f"proxy upstream error: {connect_dead}"}}).encode()
+                self._send_json_error(502, payload, f"upstream error after retries {connect_dead}")
+                return
             final = (attempt == MAX_RETRIES)
             attempt_prefill = None
             try:
