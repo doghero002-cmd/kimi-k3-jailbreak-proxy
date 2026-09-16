@@ -36,7 +36,7 @@ import zlib
 from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-UPSTREAM = os.environ.get("JB_UPSTREAM", "https://api.kimi.com/coding")
+UPSTREAM = os.environ.get("JB_UPSTREAM", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1")
 LISTEN = (
     os.environ.get("JB_HOST", "127.0.0.1"),
     int(os.environ.get("JB_PORT", "8877")),
