@@ -44,8 +44,8 @@ LISTEN = (
 KEY_FILE = os.environ.get(
     "JB_KEY_FILE", os.path.expanduser("~/.kimik3-jb-proxy/kimi-jb-key"))
 
-MAX_RETRIES = int(os.environ.get("JB_MAX_RETRIES", "2"))      # доп. попытки при отказе
-CONNECT_RETRIES = int(os.environ.get("JB_CONNECT_RETRIES", "2"))
+    MAX_RETRIES = int(os.environ.get("JB_MAX_RETRIES", "6"))      # доп. попытки при отказе
+CONNECT_RETRIES = int(os.environ.get("JB_CONNECT_RETRIES", " 6"))
 TRANSIENT_HTTP = {429, 500, 502, 503, 504, 529}              # retryable коды апстрима
 KEY_FAILOVER_HTTP = {401, 402, 403, 429}                     # отказ по конкретному ключу
 
